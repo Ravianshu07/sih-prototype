@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-4">
+    <h1><i class="bi bi-graph-up"></i> What-If Analysis</h1>
+    <p class="text-muted">Test different scenarios to understand their impact on the railway system.</p>
+</div>
+
+<div class="row">
+    <!-- Delay Analysis -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-clock"></i> Delay Impact Analysis</h5>
+            </div>
+            <div class="card-body">
+                <form id="delayAnalysisForm">
+                    <div class="mb-3">
+                        <label for="delayTrainId" class="form-label">Select Train</label>
+                        <select class="form-select" id="delayTrainId" name="train_id" required>
+                            <option value="">Choose a train...</option>
+                            {% for train in trains %}
+                            <option value="{{ train.train_id }}">
+                                {{ train.train_number }} ({{ train.train_type.value }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="delayMinutes" class="form-label">Additional Delay (minutes)</label>
+                        <input type="range" class="form-range" id="delayMinutes" 
+                               name="delay_minutes" min="5" max="120" value="15"
+                               oninput="document.getElementById('delayValue').textContent = this.value">
+                        <div class="d-flex justify-content-between">
+                            <small>5 min</small>
+                            <small><strong id="delayValue">15</strong> minutes</small>
+                            <small>120 min</small>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-play-circle"></i> Analyze Delay Impact
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Priority Analysis -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-flag"></i> Priority Change Analysis</h5>
+            </div>
+            <div class="card-body">
+                <form id="priorityAnalysisForm">
+                    <div class="mb-3">
+                        <label for="priorityTrainId" class="form-label">Select Train</label>
+                        <select class="form-select" id="priorityTrainId" name="train_id" required>
+                            <option value="">Choose a train...</option>
+                            {% for train in trains %}
+                            <option value="{{ train.train_id }}" data-current-priority="{{ train.priority.value }}">
+                                {{ train.train_number }} (Current: {{ train.priority.name }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="newPriority" class="form-label">New Priority</label>
+                        <select class="form-select" id="newPriority" name="new_priority" required>
+                            {% for priority in priorities %}
+                            <option value="{{ priority.value }}">
+                                {{ priority.name }} ({{ priority.value }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-warning w-100">
+                        <i class="bi bi-play-circle"></i> Analyze Priority Change
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Section -->
+<div class="row mt-4" id="resultsSection" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-bar-chart"></i> Analysis Results</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearResults()">
+                    <i class="bi bi-x-circle"></i> Clear
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="resultsContent">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comparison Charts -->
+<div class="row mt-4" id="chartsSection" style="display: none;">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="bi bi-graph-up"></i> Conflicts Comparison</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="conflictsChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="bi bi-clock-history"></i> Delays Comparison</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="delaysChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let conflictsChart = null;
+let delaysChart = null;
+
+document.getElementById('delayAnalysisForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    fetch('/analyze_delay', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            displayResults(data, 'delay');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+});
+
+document.getElementById('priorityAnalysisForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    
+    fetch('/analyze_priority', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            displayResults(data, 'priority');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+});
+
+function displayResults(data, analysisType) {
+    document.getElementById('resultsSection').style.display = 'block';
+    document.getElementById('chartsSection').style.display = 'block';
+    
+    const content = `
+        <div class="alert alert-info">
+            <h6><i class="bi bi-info-circle"></i> Scenario: ${data.scenario_description}</h6>
+        </div>
+        
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="card bg-light">
+                    <div class="card-body text-center">
+                        <h5 class="card-title text-primary">Impact Summary</h5>
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-2">
+                                    <strong>Conflicts Change:</strong>
+                                    <span class="badge ${data.impact.additional_conflicts >= 0 ? 'bg-danger' : 'bg-success'}">
+                                        ${data.impact.additional_conflicts >= 0 ? '+' : ''}${data.impact.additional_conflicts || data.impact.conflicts_change || 0}
+                                    </span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>System Delay Change:</strong>
+                                    <span class="badge ${(data.impact.additional_system_delay || data.impact.delay_change || 0) >= 0 ? 'bg-warning' : 'bg-success'}">
+                                        ${(data.impact.additional_system_delay || data.impact.delay_change || 0) >= 0 ? '+' : ''}${data.impact.additional_system_delay || data.impact.delay_change || 0} min
+                                    </span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Punctuality Change:</strong>
+                                    <span class="badge ${(data.impact.punctuality_impact || data.impact.punctuality_change || 0) >= 0 ? 'bg-success' : 'bg-danger'}">
+                                        ${(data.impact.punctuality_impact || data.impact.punctuality_change || 0) >= 0 ? '+' : ''}${(data.impact.punctuality_impact || data.impact.punctuality_change || 0).toFixed(1)}%
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-8">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Original Scenario</h6>
+                        <table class="table table-sm">
+                            <tr><td>Total Conflicts:</td><td><strong>${data.original_metrics.optimized_conflicts}</strong></td></tr>
+                            <tr><td>Total Delay:</td><td><strong>${data.original_metrics.optimized_total_delay} min</strong></td></tr>
+                            <tr><td>Punctuality:</td><td><strong>${data.original_metrics.punctuality_percentage}%</strong></td></tr>
+                            <tr><td>Throughput:</td><td><strong>${data.original_metrics.throughput_trains_per_hour} trains/hr</strong></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Modified Scenario</h6>
+                        <table class="table table-sm">
+                            <tr><td>Total Conflicts:</td><td><strong>${data.scenario_metrics.optimized_conflicts}</strong></td></tr>
+                            <tr><td>Total Delay:</td><td><strong>${data.scenario_metrics.optimized_total_delay} min</strong></td></tr>
+                            <tr><td>Punctuality:</td><td><strong>${data.scenario_metrics.punctuality_percentage}%</strong></td></tr>
+                            <tr><td>Throughput:</td><td><strong>${data.scenario_metrics.throughput_trains_per_hour} trains/hr</strong></td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('resultsContent').innerHTML = content;
+    
+    // Update charts
+    updateCharts(data);
+}
+
+function updateCharts(data) {
+    // Conflicts chart
+    const conflictsCtx = document.getElementById('conflictsChart').getContext('2d');
+    if (conflictsChart) conflictsChart.destroy();
+    
+    conflictsChart = new Chart(conflictsCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Original', 'Modified'],
+            datasets: [{
+                label: 'Conflicts',
+                data: [data.original_metrics.optimized_conflicts, data.scenario_metrics.optimized_conflicts],
+                backgroundColor: ['#17a2b8', '#dc3545'],
+                borderColor: ['#138496', '#c82333'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+    
+    // Delays chart
+    const delaysCtx = document.getElementById('delaysChart').getContext('2d');
+    if (delaysChart) delaysChart.destroy();
+    
+    delaysChart = new Chart(delaysCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Original', 'Modified'],
+            datasets: [{
+                label: 'Total Delay (minutes)',
+                data: [data.original_metrics.optimized_total_delay, data.scenario_metrics.optimized_total_delay],
+                backgroundColor: ['#28a745', '#ffc107'],
+                borderColor: ['#1e7e34', '#e0a800'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+}
+
+function clearResults() {
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('chartsSection').style.display = 'none';
+    
+    if (conflictsChart) {
+        conflictsChart.destroy();
+        conflictsChart = null;
+    }
+    if (delaysChart) {
+        delaysChart.destroy();
+        delaysChart = null;
+    }
+}
+
+// Update priority dropdown when train selection changes
+document.getElementById('priorityTrainId').addEventListener('change', function() {
+    const currentPriority = this.selectedOptions[0]?.dataset.currentPriority;
+    const newPrioritySelect = document.getElementById('newPriority');
+    
+    // Reset and highlight current priority
+    Array.from(newPrioritySelect.options).forEach(option => {
+        option.style.fontWeight = option.value === currentPriority ? 'bold' : 'normal';
+        option.style.backgroundColor = option.value === currentPriority ? '#e3f2fd' : '';
+    });
+});
+</script>
+{% endblock %}

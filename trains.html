@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-train-front"></i> Train Management</h1>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addTrainModal">
+        <i class="bi bi-plus-circle"></i> Add Train
+    </button>
+</div>
+
+<!-- Trains Table -->
+<div class="card">
+    <div class="card-header">
+        <h5><i class="bi bi-list"></i> Current Trains ({{ trains|length }})</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Train ID</th>
+                        <th>Train Number</th>
+                        <th>Type</th>
+                        <th>Priority</th>
+                        <th>Scheduled Arrival</th>
+                        <th>Scheduled Departure</th>
+                        <th>Current Delay</th>
+                        <th>Route</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for train in trains %}
+                    <tr>
+                        <td><code>{{ train.train_id }}</code></td>
+                        <td><strong>{{ train.train_number }}</strong></td>
+                        <td>
+                            <span class="badge bg-secondary">{{ train.train_type.value }}</span>
+                        </td>
+                        <td>
+                            <span class="badge priority-{{ train.priority.name }}">
+                                {{ train.priority.name }}
+                            </span>
+                        </td>
+                        <td>{{ train.scheduled_arrival|datetime_format }}</td>
+                        <td>{{ train.scheduled_departure|datetime_format }}</td>
+                        <td>
+                            {% if train.current_delay_minutes > 0 %}
+                                <span class="badge bg-danger">+{{ train.current_delay_minutes }} min</span>
+                            {% else %}
+                                <span class="badge bg-success">On time</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ train.route|join(' → ') }}
+                            </small>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-info btn-sm" 
+                                        onclick="showTrainDetails('{{ train.train_id }}')">
+                                    <i class="bi bi-info-circle"></i>
+                                </button>
+                                <button class="btn btn-outline-warning btn-sm" 
+                                        onclick="editTrain('{{ train.train_id }}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Train Modal -->
+<div class="modal fade" id="addTrainModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add New Train</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_train') }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="train_number" class="form-label">Train Number *</label>
+                                <input type="text" class="form-control" id="train_number" 
+                                       name="train_number" required placeholder="e.g., 12345">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="train_type" class="form-label">Train Type *</label>
+                                <select class="form-select" id="train_type" name="train_type" required>
+                                    {% for train_type in train_types %}
+                                    <option value="{{ train_type.value }}">{{ train_type.value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="priority" class="form-label">Priority *</label>
+                                <select class="form-select" id="priority" name="priority" required>
+                                    {% for priority in priorities %}
+                                    <option value="{{ priority.value }}">
+                                        {{ priority.name }} ({{ priority.value }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="delay" class="form-label">Current Delay (minutes)</label>
+                                <input type="number" class="form-control" id="delay" 
+                                       name="delay" value="0" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="arrival_time" class="form-label">Scheduled Arrival *</label>
+                                <input type="datetime-local" class="form-control" id="arrival_time" 
+                                       name="arrival_time" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="departure_time" class="form-label">Scheduled Departure *</label>
+                                <input type="datetime-local" class="form-control" id="departure_time" 
+                                       name="departure_time" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="route" class="form-label">Route (Section IDs) *</label>
+                        <input type="text" class="form-control" id="route" name="route" required 
+                               placeholder="SEC_001, SEC_002, SEC_003"
+                               title="Enter section IDs separated by commas">
+                        <div class="form-text">
+                            Available sections: SEC_001 (Platform A), SEC_002 (Main Line North), 
+                            SEC_003 (Junction X), SEC_004 (Main Line South), SEC_005 (Platform B)
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-plus-circle"></i> Add Train
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Train Details Modal -->
+<div class="modal fade" id="trainDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-info-circle"></i> Train Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="trainDetailsContent">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Set default datetime values
+    document.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        
+        document.getElementById('arrival_time').value = oneHourLater.toISOString().slice(0, 16);
+        document.getElementById('departure_time').value = twoHoursLater.toISOString().slice(0, 16);
+    });
+
+    function showTrainDetails(trainId) {
+        // Find train data
+        const trains = {{ trains|tojson }};
+        const train = trains.find(t => t.train_id === trainId);
+        
+        if (train) {
+            const content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Train ID:</strong></td><td>${train.train_id}</td></tr>
+                            <tr><td><strong>Train Number:</strong></td><td>${train.train_number}</td></tr>
+                            <tr><td><strong>Type:</strong></td><td><span class="badge bg-secondary">${train.train_type}</span></td></tr>
+                            <tr><td><strong>Priority:</strong></td><td><span class="badge priority-${train.priority.name}">${train.priority.name}</span></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Schedule Information</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>Scheduled Arrival:</strong></td><td>${new Date(train.scheduled_arrival).toLocaleString()}</td></tr>
+                            <tr><td><strong>Scheduled Departure:</strong></td><td>${new Date(train.scheduled_departure).toLocaleString()}</td></tr>
+                            <tr><td><strong>Current Delay:</strong></td><td>${train.current_delay_minutes} minutes</td></tr>
+                            <tr><td><strong>Max Speed:</strong></td><td>${train.max_speed_kmh} km/h</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Route Information</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            ${train.route.map(section => `<span class="badge bg-info">${section}</span>`).join('')}
+                        </div>
+                        <div class="mt-3">
+                            <h6>Section Times</h6>
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr><th>Section</th><th>Estimated Time (minutes)</th></tr>
+                                </thead>
+                                <tbody>
+                                    ${Object.entries(train.estimated_section_times || {}).map(([section, time]) => 
+                                        `<tr><td>${section}</td><td>${time}</td></tr>`
+                                    ).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('trainDetailsContent').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('trainDetailsModal')).show();
+        }
+    }
+
+    function editTrain(trainId) {
+        alert('Edit functionality would be implemented here for train: ' + trainId);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-house"></i> Control Dashboard</h1>
+    <button id="optimizeBtn" class="btn btn-success" onclick="optimizeSchedule()">
+        <i class="bi bi-gear"></i> Optimize Schedule
+    </button>
+</div>
+
+<!-- Key Metrics Row -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value">{{ trains|length }}</div>
+            <div class="text-muted">Active Trains</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-danger">{{ conflict_summary.total_conflicts }}</div>
+            <div class="text-muted">Total Conflicts</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-warning">{{ metrics.average_delay_per_train|round(1) }}</div>
+            <div class="text-muted">Avg Delay (min)</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-success">{{ metrics.punctuality_percentage }}%</div>
+            <div class="text-muted">On-Time Performance</div>
+        </div>
+    </div>
+</div>
+
+<!-- System Overview Row -->
+<div class="row">
+    <!-- Section Status -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-diagram-3"></i> Section Status</h5>
+            </div>
+            <div class="card-body">
+                {% for section in controller.sections %}
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                    <div>
+                        <strong>{{ section.name }}</strong>
+                        <small class="text-muted">({{ section.section_type.value }})</small>
+                    </div>
+                    <div>
+                        <span class="badge bg-info">{{ section.capacity }} capacity</span>
+                        <span class="badge bg-secondary">{{ section.length_km }}km</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Conflicts -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-exclamation-triangle"></i> Current Conflicts</h5>
+                <a href="{{ url_for('conflicts') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                {% if conflicts %}
+                    {% for conflict in conflicts %}
+                    <div class="alert alert-warning severity-{{ conflict.severity }} mb-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>{{ conflict.train1.train_number }} vs {{ conflict.train2.train_number }}</strong><br>
+                                <small>{{ conflict.section_id }} • {{ conflict.duration_minutes() }} min overlap</small>
+                            </div>
+                            <span class="badge bg-warning">Severity {{ conflict.severity }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-check-circle display-4"></i>
+                        <p class="mt-2">No conflicts detected!</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Metrics -->
+<div class="row mt-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-graph-up"></i> Performance Metrics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="h3 text-primary">{{ metrics.throughput_trains_per_hour }}</div>
+                            <div class="text-muted">Trains/Hour</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="h3 text-success">{{ metrics.optimization_effectiveness }}%</div>
+                            <div class="text-muted">Optimization Effectiveness</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="h3 text-info">{{ metrics.conflicts_reduced }}</div>
+                            <div class="text-muted">Conflicts Reduced</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Original Delays:</strong> {{ metrics.original_total_delay }} minutes<br>
+                        <strong>Optimized Delays:</strong> {{ metrics.optimized_total_delay }} minutes<br>
+                        <strong>Additional Delay:</strong> {{ metrics.additional_delay_introduced }} minutes
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Original Conflicts:</strong> {{ metrics.original_conflicts }}<br>
+                        <strong>Remaining Conflicts:</strong> {{ metrics.optimized_conflicts }}<br>
+                        <strong>Conflicts Resolved:</strong> {{ metrics.conflicts_reduced }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('trains') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-train-front"></i> Manage Trains
+                    </a>
+                    <a href="{{ url_for('sections') }}" class="btn btn-outline-info">
+                        <i class="bi bi-diagram-3"></i> View Sections
+                    </a>
+                    <a href="{{ url_for('what_if') }}" class="btn btn-outline-warning">
+                        <i class="bi bi-graph-up"></i> What-If Analysis
+                    </a>
+                    <button class="btn btn-outline-success" onclick="optimizeSchedule()">
+                        <i class="bi bi-gear"></i> Re-optimize
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Train Overview -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-train-front"></i> Train Overview</h5>
+                <a href="{{ url_for('trains') }}" class="btn btn-sm btn-outline-primary">Manage All</a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Train #</th>
+                                <th>Type</th>
+                                <th>Priority</th>
+                                <th>Arrival</th>
+                                <th>Departure</th>
+                                <th>Current Delay</th>
+                                <th>Route</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for train in trains %}
+                            <tr>
+                                <td><strong>{{ train.train_number }}</strong></td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ train.train_type.value }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge priority-{{ train.priority.name }}">{{ train.priority.name }}</span>
+                                </td>
+                                <td>{{ train.get_actual_arrival()|datetime_format }}</td>
+                                <td>{{ train.get_actual_departure()|datetime_format }}</td>
+                                <td>
+                                    {% if train.current_delay_minutes > 0 %}
+                                        <span class="badge bg-danger">+{{ train.current_delay_minutes }} min</span>
+                                    {% else %}
+                                        <span class="badge bg-success">On time</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ train.route|join(' → ') }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

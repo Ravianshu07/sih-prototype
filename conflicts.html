@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-4">
+    <h1><i class="bi bi-exclamation-triangle"></i> Conflict Management</h1>
+    <p class="text-muted">Identify, analyze, and resolve train scheduling conflicts.</p>
+</div>
+
+<!-- Conflict Summary -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-danger">{{ conflict_summary.total_conflicts }}</div>
+            <div class="text-muted">Total Conflicts</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-warning">{{ conflict_summary.critical_conflicts }}</div>
+            <div class="text-muted">Critical Conflicts</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-info">{{ conflict_summary.sections_affected|length }}</div>
+            <div class="text-muted">Sections Affected</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value text-primary">{{ conflict_summary.trains_affected|length }}</div>
+            <div class="text-muted">Trains Involved</div>
+        </div>
+    </div>
+</div>
+
+{% if conflicts %}
+<!-- Conflict Details -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5><i class="bi bi-list"></i> Conflict Details</h5>
+        <div>
+            <button class="btn btn-success" onclick="optimizeSchedule()">
+                <i class="bi bi-gear"></i> Auto-Resolve
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="accordion" id="conflictsAccordion">
+            {% for conflict in conflicts %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="heading{{ loop.index }}">
+                    <button class="accordion-button {% if loop.index > 1 %}collapsed{% endif %}" 
+                            type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#collapse{{ loop.index }}" 
+                            aria-expanded="{% if loop.index == 1 %}true{% else %}false{% endif %}">
+                        <div class="d-flex w-100 justify-content-between align-items-center me-3">
+                            <div>
+                                <strong>{{ conflict.train1.train_number }} vs {{ conflict.train2.train_number }}</strong>
+                                <small class="text-muted ms-2">in {{ conflict.section_id }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="badge severity-badge me-2
+                                    {% if conflict.severity >= 4 %}bg-danger
+                                    {% elif conflict.severity >= 3 %}bg-warning
+                                    {% else %}bg-info{% endif %}">
+                                    Severity {{ conflict.severity }}
+                                </span>
+                                <span class="badge bg-secondary">
+                                    {{ conflict.duration_minutes() }} min overlap
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapse{{ loop.index }}" 
+                     class="accordion-collapse collapse {% if loop.index == 1 %}show{% endif %}" 
+                     data-bs-parent="#conflictsAccordion">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <!-- Conflict Information -->
+                            <div class="col-lg-6">
+                                <h6>Conflict Details</h6>
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Section:</strong></td>
+                                        <td>{{ conflict.section_id }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Conflict Start:</strong></td>
+                                        <td>{{ conflict.conflict_start_time|datetime_format }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Conflict End:</strong></td>
+                                        <td>{{ conflict.conflict_end_time|datetime_format }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Duration:</strong></td>
+                                        <td>{{ conflict.duration_minutes()|duration_format }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Severity Level:</strong></td>
+                                        <td>
+                                            <span class="badge 
+                                                {% if conflict.severity >= 4 %}bg-danger
+                                                {% elif conflict.severity >= 3 %}bg-warning
+                                                {% else %}bg-info{% endif %}">
+                                                {{ conflict.severity }}/5
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <!-- Train Information -->
+                            <div class="col-lg-6">
+                                <h6>Involved Trains</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="border rounded p-2 mb-2">
+                                            <strong>{{ conflict.train1.train_number }}</strong><br>
+                                            <small>Type: {{ conflict.train1.train_type.value }}</small><br>
+                                            <small>Priority: 
+                                                <span class="badge priority-{{ conflict.train1.priority.name }}">
+                                                    {{ conflict.train1.priority.name }}
+                                                </span>
+                                            </small><br>
+                                            <small>Delay: {{ conflict.train1.current_delay_minutes }} min</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="border rounded p-2 mb-2">
+                                            <strong>{{ conflict.train2.train_number }}</strong><br>
+                                            <small>Type: {{ conflict.train2.train_type.value }}</small><br>
+                                            <small>Priority: 
+                                                <span class="badge priority-{{ conflict.train2.priority.name }}">
+                                                    {{ conflict.train2.priority.name }}
+                                                </span>
+                                            </small><br>
+                                            <small>Delay: {{ conflict.train2.current_delay_minutes }} min</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Resolution Suggestions -->
+                        <div class="mt-4">
+                            <h6>Resolution Suggestions</h6>
+                            {% if resolutions[conflict.conflict_id] %}
+                            <div class="list-group">
+                                {% for suggestion in resolutions[conflict.conflict_id] %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="bi bi-lightbulb text-warning"></i>
+                                        {{ suggestion }}
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="implementSuggestion('{{ conflict.conflict_id }}', {{ loop.index0 }})">
+                                        <i class="bi bi-check"></i> Apply
+                                    </button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-muted">
+                                <em>No automatic resolution suggestions available.</em>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Manual Resolution -->
+                        <div class="mt-3">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-warning" 
+                                        onclick="delayTrain('{{ conflict.train1.train_id }}', 15)">
+                                    Delay {{ conflict.train1.train_number }} (15 min)
+                                </button>
+                                <button class="btn btn-sm btn-warning" 
+                                        onclick="delayTrain('{{ conflict.train2.train_id }}', 15)">
+                                    Delay {{ conflict.train2.train_number }} (15 min)
+                                </button>
+                                <button class="btn btn-sm btn-info" 
+                                        onclick="analyzeConflict('{{ conflict.conflict_id }}')">
+                                    <i class="bi bi-graph-up"></i> Analyze Impact
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- No Conflicts -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <div class="mb-4">
+            <i class="bi bi-check-circle display-1 text-success"></i>
+        </div>
+        <h3>No Conflicts Detected!</h3>
+        <p class="text-muted">The current train schedule is optimized and conflict-free.</p>
+        <div class="mt-4">
+            <a href="{{ url_for('trains') }}" class="btn btn-primary me-2">
+                <i class="bi bi-train-front"></i> Manage Trains
+            </a>
+            <a href="{{ url_for('what_if') }}" class="btn btn-outline-info">
+                <i class="bi bi-graph-up"></i> Run What-If Analysis
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Conflict Statistics -->
+{% if conflict_summary.severity_breakdown %}
+<div class="row mt-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-bar-chart"></i> Conflict Analysis</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="severityChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> Quick Stats</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Severity Breakdown:</strong>
+                    <ul class="list-unstyled mt-2">
+                        {% for severity, count in conflict_summary.severity_breakdown.items() %}
+                        <li class="d-flex justify-content-between">
+                            <span>Level {{ severity }}:</span>
+                            <span class="badge 
+                                {% if severity >= 4 %}bg-danger
+                                {% elif severity >= 3 %}bg-warning
+                                {% else %}bg-info{% endif %}">{{ count }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Affected Sections:</strong>
+                    <div class="mt-2">
+                        {% for section in conflict_summary.sections_affected %}
+                        <span class="badge bg-secondary me-1">{{ section }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <button class="btn btn-success w-100" onclick="optimizeSchedule()">
+                        <i class="bi bi-gear"></i> Auto-Resolve All Conflicts
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Initialize severity chart if there are conflicts
+{% if conflict_summary.severity_breakdown %}
+const ctx = document.getElementById('severityChart').getContext('2d');
+const severityData = {{ conflict_summary.severity_breakdown|tojson }};
+
+new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: Object.keys(severityData).map(level => `Severity ${level}`),
+        datasets: [{
+            data: Object.values(severityData),
+            backgroundColor: [
+                '#17a2b8',  // Severity 1-2 (info)
+                '#ffc107',  // Severity 3 (warning)
+                '#fd7e14',  // Severity 4 (orange)
+                '#dc3545'   // Severity 5 (danger)
+            ].slice(0, Object.keys(severityData).length),
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+{% endif %}
+
+function implementSuggestion(conflictId, suggestionIndex) {
+    // This would implement the specific suggestion
+    alert(`Implementing suggestion ${suggestionIndex + 1} for conflict ${conflictId}`);
+    // In a real system, this would make an API call to apply the suggestion
+}
+
+function delayTrain(trainId, minutes) {
+    if (confirm(`Are you sure you want to delay train ${trainId} by ${minutes} minutes?`)) {
+        // This would make an API call to delay the train
+        alert(`Train ${trainId} delayed by ${minutes} minutes`);
+        // location.reload(); // Refresh to show updated conflicts
+    }
+}
+
+function analyzeConflict(conflictId) {
+    // Navigate to what-if analysis page with this conflict pre-selected
+    window.location.href = '/what_if';
+}
+</script>
+{% endblock %}
